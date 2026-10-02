@@ -164,6 +164,22 @@ chars) and the single-dirty-file name (up to 30) are the widest thing on the
 line, so with them on row 2 the quota bars stop sliding sideways every time you
 switch branches.
 
+The top row still runs past 80 columns once the context grows and the session
+passes 10 hours (`780.0k/1.0M·78%`, `⏳12h15m`). Moving `session` down as well
+keeps both rows under 80:
+
+```sh
+STATUSLINE_LAYOUT=5h,7d,fable,model,nl,dir,sid,session
+```
+
+```
+5h[▄░░░5%░░░░]⏰3h29m | 7d[███53%░░░░]⏰3d15h | Opus 5.5(780.0k/1.0M·78%)
+proj:main | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa | ⏳12h15m
+```
+
+That's 73 / 60 columns, leaving room for a branch name of up to about 20
+characters on row 2.
+
 `nl` is just a token in the layout, so any segment can move and more than one
 break is allowed. A row whose segments all hide produces no blank line — with
 `nl,sid` in a session that ships no id, you get one row, not one row and an
