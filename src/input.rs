@@ -21,6 +21,18 @@ pub struct Input {
     pub rate_limits: Option<RateLimits>,
     #[serde(default)]
     pub cost: Option<Cost>,
+    #[serde(default)]
+    pub effort: Option<Effort>,
+}
+
+/// The session's reasoning effort (`low`..`max`). Claude Code omits the
+/// whole object for models that don't support effort, so `None` means "not
+/// applicable", not "unknown". `level` is kept as a free string: a level
+/// added upstream should render as-is rather than fail the payload.
+#[derive(Debug, Default, Deserialize, Clone)]
+pub struct Effort {
+    #[serde(default)]
+    pub level: String,
 }
 
 /// Session cost/usage counters. Only `total_duration_ms` is consumed — it is
@@ -278,6 +290,19 @@ mod tests {
     fn parse_missing_cost_is_none() {
         let input = parse("{}").unwrap();
         assert!(input.cost.is_none());
+    }
+
+    #[test]
+    fn parse_effort_level() {
+        let json = r#"{"effort": {"level": "xhigh"}}"#;
+        let input = parse(json).unwrap();
+        assert_eq!(input.effort.unwrap().level, "xhigh");
+    }
+
+    #[test]
+    fn parse_missing_effort_is_none() {
+        // Claude Code omits `effort` for models without effort support.
+        assert!(parse("{}").unwrap().effort.is_none());
     }
 
     #[test]

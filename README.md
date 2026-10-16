@@ -1,20 +1,18 @@
 # claude-quota-bar
 
 Fast Rust statusline for [Claude Code](https://github.com/anthropics/claude-code).
-Battery-style 5-hour / 7-day quota bars, context-window indicator, session
-elapsed time, and `dir:branch *N` — at ~2.5ms cold start and a ~0.5MB binary.
+Battery-style 5-hour / 7-day quota bars, context-window indicator, reasoning
+effort, session elapsed time, and `dir:branch *N` — at ~2.5ms cold start and a ~0.5MB binary.
 
 ```
-5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰8d3h | Opus 4.7(71.0k/1.0M·7%) | ⏳2h15m | proj:main *3
+5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h | Fable[██░18%░░░░]⏰5d
+Opus 5.5(71.0k/1.0M·7%) | effort:high | ⏳2h15m
+proj:main *3
 ```
 
-Optionally two rows, with the session id ready to copy into
-`claude -r <id> --fork-session`:
-
-```
-5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰8d3h | Opus 4.7(71.0k/1.0M·7%) | ⏳2h15m
-proj:main *3 | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa
-```
+Three rows by default — quota, then model, then where you are — each inside 80
+columns. Optionally with the session id ready to copy into
+`claude -r <id> --fork-session` ([see below](#session-id-sid)).
 
 Requires Claude Code ≥ 2.1.132 (where `context_window.total_input_tokens`
 reports the current context occupancy rather than a cumulative session total).
@@ -55,7 +53,7 @@ Then wire it into Claude Code (`~/.claude/settings.json`):
 
 ## Segments
 
-Default layout: `5h,7d,fable,model,session,dir`.
+Default layout: `5h,7d,fable,nl,model,effort,session,nl,dir` (three rows).
 
 | Segment | Source | What it shows |
 |---------|--------|---------------|
@@ -64,11 +62,12 @@ Default layout: `5h,7d,fable,model,session,dir`.
 | `fable` | `rate_limits.model_scoped` | Same, for the per-model Fable allowance (Max/Team Premium: Fable at 50% of limits). Hidden until the server ships a Fable bucket |
 | `model` | `model` + `context_window` | `Opus 4.7(71.0k/1.0M·7%)` — model, ctx tokens used / window, and ctx occupancy % (Claude Code's own `used_percentage` when shipped, derived from the token counts otherwise) |
 | `session` | `cost.total_duration_ms` | `⏳2h15m` — wall-clock time this session |
+| `effort` | `effort.level` | `effort:high` — reasoning effort (`low`/`medium`/`high`/`xhigh`/`max`). Hidden for models without effort support |
 | `dir`   | `workspace.current_dir` + git | `proj:main *3 ↑1 ↓2` — dir, branch, dirty count, ahead/behind |
 | `sid`   | `session_id` | `#3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa` — the session id. Opt-in, [see below](#session-id-sid) |
 
 Plus one non-segment token: `nl` breaks the line, so everything after it renders
-as a second status row ([see below](#second-row-nl)).
+as a new status row ([see below](#rows-nl)).
 
 ### Pace hints
 
@@ -118,7 +117,7 @@ Configured via environment variables:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `STATUSLINE_LAYOUT` | `5h,7d,fable,model,session,dir` | Comma-separated segment names (order matters) |
+| `STATUSLINE_LAYOUT` | `5h,7d,fable,nl,model,effort,session,nl,dir` | Comma-separated segment names (order matters) |
 | `STATUSLINE_THRESHOLDS` | `30,70` | Severity flip points (green→yellow→red) as `warn,hot` percentages |
 | `STATUSLINE_SID_LEN` | unset (full id) | Characters of the session id the `sid` segment prints |
 | `NO_COLOR` | unset | If set, strips all ANSI — falls back to `█`/`░` glyphs |
@@ -134,7 +133,13 @@ Not in the default layout — a full UUID is 36 columns. Add it when you want th
 id on screen to copy, instead of digging it out of `/status`:
 
 ```sh
-STATUSLINE_LAYOUT=5h,7d,model,session,sid,dir
+STATUSLINE_LAYOUT=5h,7d,fable,nl,model,effort,session,nl,dir,sid
+```
+
+```
+5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h | Fable[██░18%░░░░]⏰5d
+Opus 5.5(71.0k/1.0M·7%) | effort:high | ⏳2h15m
+proj:main *3 | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa
 ```
 
 It pairs with `claude -r <session_id> --fork-session`, which forks the current
@@ -143,47 +148,25 @@ independent task — leaving the original untouched. The id prints bare after a
 mute `#` so a double-click selects the UUID alone. Set
 `STATUSLINE_SID_LEN=8` if you only want enough to tell sessions apart.
 
-### Second row (`nl`)
+### Rows (`nl`)
 
-Those 36 columns fit better on a row of their own. The layout token `nl` breaks
-the line, and Claude Code renders each output line as its own status row:
+The layout token `nl` breaks the line, and Claude Code renders each output line
+as its own status row. The default uses two breaks: the changing numbers on top,
+the "where am I" identity at the bottom. Keeping `dir` on its own row has a
+second benefit: branch names (up to 25 chars) and the single-dirty-file name (up
+to 30) are the widest thing on the bar, so with them at the bottom the quota
+bars never slide sideways when you switch branches.
 
-```sh
-STATUSLINE_LAYOUT=5h,7d,fable,model,session,nl,dir,sid
-```
-
-```
-5h[███42%░░░░]✦⏰25m | 7d[███35%░░░░]⏰8d2h | Opus 5(78.0k/1.0M·8%) | ⏳2h15m
-proj:feat/some-branch *5 | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa
-```
-
-Measured on that session, one line came to 116 columns — it wraps an 80-column
-terminal. Split, it's 77 / 76: the changing numbers on top, the "where am I"
-identity below. Moving `dir` down has a second benefit: branch names (up to 25
-chars) and the single-dirty-file name (up to 30) are the widest thing on the
-line, so with them on row 2 the quota bars stop sliding sideways every time you
-switch branches.
-
-The top row still runs past 80 columns once the context grows and the session
-passes 10 hours (`780.0k/1.0M·78%`, `⏳12h15m`). Moving `session` down as well
-keeps both rows under 80:
+Prefer a single line (it wraps an 80-column terminal once the context grows)?
+Drop the breaks:
 
 ```sh
-STATUSLINE_LAYOUT=5h,7d,fable,model,nl,dir,sid,session
+STATUSLINE_LAYOUT=5h,7d,fable,model,effort,session,dir
 ```
 
-```
-5h[▄░░░5%░░░░]⏰3h29m | 7d[███53%░░░░]⏰3d15h | Opus 5.5(780.0k/1.0M·78%)
-proj:main | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa | ⏳12h15m
-```
-
-That's 73 / 60 columns, leaving room for a branch name of up to about 20
-characters on row 2.
-
-`nl` is just a token in the layout, so any segment can move and more than one
-break is allowed. A row whose segments all hide produces no blank line — with
-`nl,sid` in a session that ships no id, you get one row, not one row and an
-empty one.
+`nl` is just a token in the layout, so any segment can move and any number of
+breaks is allowed. A row whose segments all hide produces no blank line — with
+`nl,sid` in a session that ships no id, you don't get an empty trailing row.
 
 ## Development
 
