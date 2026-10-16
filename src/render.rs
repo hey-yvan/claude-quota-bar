@@ -9,7 +9,12 @@ use crate::progress::battery_bar;
 use crate::theme::Theme;
 use crate::time_fmt::{countdown, fmt_elapsed, fmt_tokens};
 
-pub const DEFAULT_LAYOUT: &[&str] = &["5h", "7d", "fable", "model", "session", "dir"];
+/// Three rows: quota bars, then model/effort/session, then dir. Splitting
+/// keeps each row inside 80 columns and stops a long branch name from
+/// sliding the quota bars sideways.
+pub const DEFAULT_LAYOUT: &[&str] = &[
+    "5h", "7d", "fable", "nl", "model", "effort", "session", "nl", "dir",
+];
 /// Every segment name `build_segment` answers to, including the opt-in ones
 /// absent from `DEFAULT_LAYOUT`. The unknown-layout guard in `render` checks
 /// against this, not the default: a `STATUSLINE_LAYOUT=sid` is a deliberate
@@ -20,7 +25,9 @@ pub const DEFAULT_LAYOUT: &[&str] = &["5h", "7d", "fable", "model", "session", "
 /// from `SEGMENTS`: it carries nothing, so a layout of only line breaks is
 /// still "unrecognized" and falls back to the default.
 pub const LINE_BREAK: &str = "nl";
-pub const SEGMENTS: &[&str] = &["5h", "7d", "fable", "model", "session", "sid", "dir"];
+pub const SEGMENTS: &[&str] = &[
+    "5h", "7d", "fable", "model", "effort", "session", "sid", "dir",
+];
 pub const BAR_WIDTH: usize = 10;
 pub const BRANCH_MAX_LEN: usize = 25;
 /// Cap on the single-dirty-file path width. Past this, fall back to `*1`
@@ -122,6 +129,7 @@ fn build_segment(name: &str, ctx: &Context) -> Option<String> {
         )),
         "fable" => build_fable(ctx),
         "model" => Some(build_model(ctx)),
+        "effort" => build_effort(ctx),
         "session" => build_session(ctx),
         "sid" => build_sid(ctx),
         "dir" => build_dir(ctx),
@@ -142,6 +150,19 @@ fn build_fable(ctx: &Context) -> Option<String> {
         w.resets_at,
         None,
     ))
+}
+
+/// Reasoning effort of the current model. Hides when the model has no
+/// effort setting — Claude Code drops the `effort` object entirely then.
+fn build_effort(ctx: &Context) -> Option<String> {
+    let level = ctx.input.effort.as_ref()?.level.trim();
+    if level.is_empty() {
+        return None;
+    }
+    let mute = fg(ctx.theme.mute);
+    let ink = fg(ctx.theme.ink);
+    let r = reset();
+    Some(format!("{mute}effort:{r}{ink}{level}{r}"))
 }
 
 fn build_session(ctx: &Context) -> Option<String> {
@@ -368,7 +389,9 @@ fn truncate_branch(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use crate::ansi::strip_ansi;
-    use crate::input::{ContextWindow, Model, ModelScopedWindow, RateLimits, Window, Workspace};
+    use crate::input::{
+        ContextWindow, Effort, Model, ModelScopedWindow, RateLimits, Window, Workspace,
+    };
     use crate::theme::GRAPHITE;
     use std::sync::Mutex;
 
@@ -802,11 +825,38 @@ mod tests {
     }
 
     #[test]
-    fn default_layout_places_session_before_dir() {
+    fn default_layout_is_three_rows() {
         assert_eq!(
             DEFAULT_LAYOUT,
-            &["5h", "7d", "fable", "model", "session", "dir"]
+            &[
+                "5h", "7d", "fable", "nl", "model", "effort", "session", "nl", "dir"
+            ]
         );
+    }
+
+    #[test]
+    fn default_layout_renders_quota_model_and_dir_rows() {
+        no_color(|| {
+            let mut inp = full_input();
+            inp.effort = Some(Effort {
+                level: "high".into(),
+            });
+            let lay = layout(&["nope"]);
+            let mut c = ctx(&inp, &lay, None);
+            c.session_elapsed_secs = Some(90);
+            let out = strip_ansi(&render(&c));
+            let rows: Vec<&str> = out.lines().collect();
+            assert_eq!(rows.len(), 3, "expected three rows in {out:?}");
+            assert!(
+                rows[0].starts_with("5h") && rows[0].contains("7d"),
+                "{out:?}"
+            );
+            assert!(
+                rows[1].starts_with("Opus 4.7") && rows[1].contains("effort:high"),
+                "{out:?}"
+            );
+            assert!(rows[2].contains("proj"), "{out:?}");
+        });
     }
 
     #[test]
@@ -1227,6 +1277,46 @@ mod tests {
             let lay = layout(&["nl"]);
             let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
             assert!(out.contains("42%"), "expected default fallback: {out:?}");
+        });
+    }
+
+    #[test]
+    fn effort_segment_renders_level() {
+        no_color(|| {
+            let mut inp = full_input();
+            inp.effort = Some(Effort {
+                level: "xhigh".into(),
+            });
+            let lay = layout(&["effort"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert_eq!(out, "effort:xhigh");
+        });
+    }
+
+    #[test]
+    fn effort_segment_hides_when_model_has_no_effort() {
+        no_color(|| {
+            let mut inp = full_input();
+            let lay = layout(&["effort", "5h"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(out.starts_with("5h"), "stray effort token: {out:?}");
+
+            inp.effort = Some(Effort { level: "  ".into() });
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(out.starts_with("5h"), "blank level rendered: {out:?}");
+        });
+    }
+
+    #[test]
+    fn effort_only_layout_is_not_treated_as_unknown() {
+        no_color(|| {
+            let mut inp = full_input();
+            inp.effort = Some(Effort {
+                level: "high".into(),
+            });
+            let lay = layout(&["effort"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(!out.contains("42%"), "fell back to default layout: {out:?}");
         });
     }
 }
