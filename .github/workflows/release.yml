@@ -42,7 +42,7 @@ jobs:
 
       - name: Run release-plz
         id: release-plz
-        uses: release-plz/action@b8d6b54b02889ff2ae2bb82e8b57c3a8fc1683a5 # v0.5.139
+        uses: release-plz/action@f67a7e724bdad4a0f6875f186060a0ca2770d76c # v0.5.147
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -105,7 +105,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -160,7 +160,7 @@ jobs:
           ls -lh dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
           path: dist/*
@@ -179,7 +179,7 @@ jobs:
           ref: ${{ fromJSON(needs.release-plz.outputs.releases)[0].tag }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: artifacts/
 
@@ -213,7 +213,7 @@ jobs:
         with:
           ref: ${{ fromJSON(needs.release-plz.outputs.releases)[0].tag }}
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           # Node 24 ships with npm 11+; OIDC trusted publishing needs ≥ 11.5.
           # We avoid `npm install -g npm@latest` because in-place npm upgrades
@@ -222,7 +222,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: artifacts/
 
