@@ -36,7 +36,7 @@ npm install -g claude-quota-bar
 cargo install claude-quota-bar
 
 # pre-built binary (macOS arm64 example)
-curl -L https://github.com/xrf9268-hue/claude-quota-bar/releases/latest/download/claude-quota-bar-aarch64-apple-darwin.tar.gz | tar xz
+curl -L https://github.com/hey-yvan/claude-quota-bar/releases/latest/download/claude-quota-bar-aarch64-apple-darwin.tar.gz | tar xz
 mv claude-quota-bar /usr/local/bin/
 ```
 

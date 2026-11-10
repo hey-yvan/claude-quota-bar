@@ -42,7 +42,7 @@ npm logout
 2. 找到 **Trusted publishers** 区块 → **Add new publisher**
 3. 填写：
    - **Provider**: GitHub Actions
-   - **Organization or user**: `xrf9268-hue`
+   - **Organization or user**: `hey-yvan`
    - **Repository**: `claude-quota-bar`
    - **Workflow filename**: `release.yml`
    - **Environment name**: 留空（除非你配了 GH Environment）
@@ -77,7 +77,7 @@ npm logout
    cargo publish      # 发布当前 Cargo.toml 版本到 crates.io
    ```
 2. **配 Trusted Publisher**：crates.io 上 `claude-quota-bar` 的 **Settings → Trusted Publishing → Add**：
-   - **Repository owner**: `xrf9268-hue`
+   - **Repository owner**: `hey-yvan`
    - **Repository name**: `claude-quota-bar`
    - **Workflow filename**: `release.yml`
    - **Environment**: 留空

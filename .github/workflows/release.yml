@@ -24,7 +24,7 @@ jobs:
     name: release-plz
     runs-on: ubuntu-latest
     # Don't run the release machinery on forks.
-    if: github.repository == 'xrf9268-hue/claude-quota-bar'
+    if: github.repository == 'hey-yvan/claude-quota-bar'
     permissions:
       contents: write # create the tag, the release, and push the Release PR branch
       pull-requests: write # open / update the Release PR

@@ -42,7 +42,7 @@ const pkg = packageName();
 if (!pkg) {
   console.error(
     `claude-quota-bar: unsupported platform ${process.platform}/${process.arch}. ` +
-      "Download a binary from https://github.com/xrf9268-hue/claude-quota-bar/releases."
+      "Download a binary from https://github.com/hey-yvan/claude-quota-bar/releases."
   );
   process.exit(1);
 }
