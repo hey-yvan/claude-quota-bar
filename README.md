@@ -5,13 +5,14 @@ Battery-style 5-hour / 7-day quota bars, context-window indicator, reasoning
 effort, session elapsed time, and `dir:branch *N` — at ~2.5ms cold start and a ~0.5MB binary.
 
 ```
-5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h | Fable[██░18%░░░░]⏰5d
-Opus 5.5(71.0k/1.0M·7%) | effort:high | ⏳2h15m
+5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h
+Fable[██░18%░░░░]⏰5d | Opus 5.5(71.0k/1.0M·7%)
+effort:high | ⏳2h15m
 proj:main *3
 ```
 
-Three rows by default — quota, then model, then where you are — each inside 80
-columns. Optionally with the session id ready to copy into
+Two segments per row by default, so the bar fits the narrow panes you get when
+running several sessions side by side. Optionally with the session id ready to copy into
 `claude -r <id> --fork-session` ([see below](#session-id-sid)).
 
 Requires Claude Code ≥ 2.1.132 (where `context_window.total_input_tokens`
@@ -53,11 +54,11 @@ Then wire it into Claude Code (`~/.claude/settings.json`):
 
 ## Segments
 
-Default layout: `5h,7d,fable,nl,model,effort,session,nl,dir` (three rows).
+Default layout: `5h,7d,fable,model,effort,session,dir`, packed two visible segments per row (hidden segments don't leave gaps).
 
 | Segment | Source | What it shows |
 |---------|--------|---------------|
-| `5h`    | `rate_limits.five_hour` | Battery bar with `%` inside, `⏰` countdown to reset, and pace hints (`▲`/`✦`, see below) |
+| `5h`    | `rate_limits.five_hour` | Battery bar with `%` inside, `⏰` countdown to reset, and pace hints (`▲`/`✦`, see below). Hidden on plans without a 5-hour window (e.g. Ultra) — when the server ships a `seven_day` bucket but no `five_hour`. A cached window that merely expired still shows `--%` |
 | `7d`    | `rate_limits.seven_day` | Same, weekly window |
 | `fable` | `rate_limits.model_scoped` | Same, for the per-model Fable allowance (Max/Team Premium: Fable at 50% of limits). Hidden until the server ships a Fable bucket |
 | `model` | `model` + `context_window` | `Opus 4.7(71.0k/1.0M·7%)` — model, ctx tokens used / window, and ctx occupancy % (Claude Code's own `used_percentage` when shipped, derived from the token counts otherwise) |
@@ -96,8 +97,11 @@ session started — formatted directly. A few consequences worth knowing:
   at lunch). Without `statusLine.refreshInterval` set, the statusline only
   re-renders at each turn's completion, so the value you see is effectively
   sampled at the last stop and stays put until the next turn.
-- It **resets to zero on `--resume` / `--continue`** — a resumed session is a
-  new process, so the counter starts over.
+- It **carries over on `--resume` / `--continue` and `--fork-session`** —
+  Claude Code restores the duration saved in the parent transcript. Several
+  forks of one session therefore show the same (inherited) time and tick up in
+  lockstep; that's Claude Code's counter, not panes sharing state — the
+  statusline keeps no per-session state of its own.
 
 > An earlier version kept its own per-session ledger that tried to subtract
 > idle gaps. But the statusline render is sparse and event-driven (Claude
@@ -117,7 +121,7 @@ Configured via environment variables:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `STATUSLINE_LAYOUT` | `5h,7d,fable,nl,model,effort,session,nl,dir` | Comma-separated segment names (order matters) |
+| `STATUSLINE_LAYOUT` | `5h,7d,fable,model,effort,session,dir`, two per row | Comma-separated segment names (order matters). Once set, rows break only at `nl` |
 | `STATUSLINE_THRESHOLDS` | `30,70` | Severity flip points (green→yellow→red) as `warn,hot` percentages |
 | `STATUSLINE_SID_LEN` | unset (full id) | Characters of the session id the `sid` segment prints |
 | `NO_COLOR` | unset | If set, strips all ANSI — falls back to `█`/`░` glyphs |
@@ -133,13 +137,15 @@ Not in the default layout — a full UUID is 36 columns. Add it when you want th
 id on screen to copy, instead of digging it out of `/status`:
 
 ```sh
-STATUSLINE_LAYOUT=5h,7d,fable,nl,model,effort,session,nl,dir,sid
+STATUSLINE_LAYOUT=5h,7d,nl,fable,model,nl,effort,session,nl,dir,nl,sid
 ```
 
 ```
-5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h | Fable[██░18%░░░░]⏰5d
-Opus 5.5(71.0k/1.0M·7%) | effort:high | ⏳2h15m
-proj:main *3 | #3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa
+5h[███42%░░░░]✦⏰26m | 7d[███35%░░░░]⏰3d15h
+Fable[██░18%░░░░]⏰5d | Opus 5.5(71.0k/1.0M·7%)
+effort:high | ⏳2h15m
+proj:main *3
+#3f9a1c2b-7d4e-4a10-9c33-8b21ef0d55aa
 ```
 
 It pairs with `claude -r <session_id> --fork-session`, which forks the current
@@ -151,14 +157,15 @@ mute `#` so a double-click selects the UUID alone. Set
 ### Rows (`nl`)
 
 The layout token `nl` breaks the line, and Claude Code renders each output line
-as its own status row. The default uses two breaks: the changing numbers on top,
-the "where am I" identity at the bottom. Keeping `dir` on its own row has a
-second benefit: branch names (up to 25 chars) and the single-dirty-file name (up
-to 30) are the widest thing on the bar, so with them at the bottom the quota
-bars never slide sideways when you switch branches.
+as its own status row. The default layout carries no `nl` at all: it packs the
+*visible* segments two per row, so on a plan without a 5-hour window `7d` pairs
+with the model instead of sitting alone. `dir` goes last because branch names
+(up to 25 chars) and the single-dirty-file name (up to 30) are the widest thing
+on the bar. Once you set `STATUSLINE_LAYOUT`, rows break only where you put
+`nl` — your layout is never re-wrapped.
 
 Prefer a single line (it wraps an 80-column terminal once the context grows)?
-Drop the breaks:
+Set the layout explicitly with no breaks:
 
 ```sh
 STATUSLINE_LAYOUT=5h,7d,fable,model,effort,session,dir

@@ -107,6 +107,12 @@ pub struct RateLimits {
     /// whole payload, because this field's wire shape is still settling.
     #[serde(default, deserialize_with = "lenient_model_scoped")]
     pub model_scoped: Vec<ModelScopedWindow>,
+    /// Set by cache hydration when it dropped an expired 5h window. Without
+    /// it, "rolled over" and "this plan has no 5h window" look identical
+    /// (both `five_hour: None` next to a live `seven_day`) and the 5h bar
+    /// would hide when it should read `--%`.
+    #[serde(skip)]
+    pub five_hour_rolled_over: bool,
 }
 
 impl RateLimits {

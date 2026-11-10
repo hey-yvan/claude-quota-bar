@@ -113,8 +113,12 @@ These are the load-bearing decisions that aren't obvious from reading code:
 
 7. **The `session` segment renders `cost.total_duration_ms` directly.**
    It is `Date.now() - processStart` inside Claude Code (verified against the
-   2.1.175 binary): wall-clock since the session started, growing while idle
-   and resetting to zero on `--resume`. We render it as-is (ms → s) and hide
+   2.1.175 binary): wall-clock since the session started, growing while idle.
+   Since at least 2.1.322 it lives on a `costLedger` that `--resume` *and*
+   `--fork-session` restore from the parent transcript (`startTime = now -
+   lastDuration`), so forks of one session show the same inherited time and
+   tick in lockstep. That is upstream semantics, not cross-session leakage
+   (this binary keeps no per-session state). We render it as-is (ms → s) and hide
    the segment when stdin ships no `cost` object yet (very first renders).
    This replaced a per-session ledger that integrated render-to-render gaps:
    the statusline render is sparse and event-driven (Claude Code's docs note
@@ -132,7 +136,11 @@ These are the load-bearing decisions that aren't obvious from reading code:
    recognized segment that legitimately hides (`dir` with empty cwd) still
    renders empty. Recognition checks `render::SEGMENTS`, not `DEFAULT_LAYOUT`
    — opt-in segments (`sid`) are absent from the default and would otherwise
-   be mistaken for stale config. `render::LINE_BREAK` (`nl`) is deliberately
+   be mistaken for stale config. An unset `STATUSLINE_LAYOUT` reaches render
+   as an empty layout and takes the same path. The default is packed
+   `DEFAULT_SEGMENTS_PER_ROW` (2) *visible* segments per row, for narrow
+   side-by-side panes; explicit layouts are never re-wrapped, only `nl` breaks
+   them. `render::LINE_BREAK` (`nl`) is deliberately
    *not* in `SEGMENTS`: it carries no content, so a layout of only line
    breaks must still count as unrecognized.
 

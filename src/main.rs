@@ -56,10 +56,8 @@ fn main() {
 
     let layout: Vec<String> = match std::env::var("STATUSLINE_LAYOUT") {
         Ok(s) => s.split(',').map(|x| x.trim().to_string()).collect(),
-        Err(_) => render::DEFAULT_LAYOUT
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        // Empty = "use the default": render packs it two segments per row.
+        Err(_) => Vec::new(),
     };
 
     // Severity thresholds: env override, silently falling back to the
@@ -106,8 +104,9 @@ fn print_help() {
          \x20 claude-quota-bar [--version] [--help]\n\
          \n\
          Environment:\n\
-         \x20 STATUSLINE_LAYOUT      Comma-separated segments (default: 5h,7d,fable,nl,model,effort,session,nl,dir)\n\
-         \x20                        The token `nl` breaks the line into a second status row\n\
+         \x20 STATUSLINE_LAYOUT      Comma-separated segments (default: 5h,7d,fable,model,effort,session,dir,\n\
+         \x20                        two visible segments per row)\n\
+         \x20                        The token `nl` breaks the line into a new status row\n\
          \x20 STATUSLINE_THRESHOLDS  Severity flip points as \"warn,hot\" percentages (default: 30,70)\n\
          \x20 STATUSLINE_SID_LEN     Characters of the session id the `sid` segment prints (default: full)\n\
          \x20 NO_COLOR               Disable ANSI color; fall back to block glyphs",

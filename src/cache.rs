@@ -98,7 +98,9 @@ pub fn fill_from_cache(input: &mut Input) {
     let now_unix = now();
     let mut limits = RateLimits::default();
     if let Some(rl) = cached.rate_limits {
+        let had_five_hour = rl.five_hour.is_some();
         limits.five_hour = rollover(rl.five_hour, now_unix);
+        limits.five_hour_rolled_over = had_five_hour && limits.five_hour.is_none();
         limits.seven_day = rollover(rl.seven_day, now_unix);
         // Same rollover rule for per-model buckets: an expired resets_at
         // means the window rolled and the cached pct is meaningless — drop
