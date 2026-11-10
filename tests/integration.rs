@@ -106,6 +106,27 @@ fn plan_without_5h_window_hides_5h_in_default_layout() {
 }
 
 #[test]
+fn expired_cached_5h_window_shows_dashes_not_hidden() {
+    // A Max user's cache whose 5h window already rolled over, next to a live
+    // 7d window. Rollover drops the 5h entry, which must read as "unknown"
+    // (--%), not as "this plan has no 5h window" (hidden).
+    let home = TempDir::new().expect("tempdir");
+    let cache_dir = home.path().join(".cache/claude-quota-bar");
+    fs::create_dir_all(&cache_dir).unwrap();
+    let cached = format!(
+        r#"{{"session_id":"old","rate_limits":{{"five_hour":{{"used_percentage":80,"resets_at":{}}},"seven_day":{{"used_percentage":20,"resets_at":{}}}}}}}"#,
+        now_unix() - 60,
+        now_unix() + 3 * 86400
+    );
+    fs::write(cache_dir.join("last_stdin.json"), cached).unwrap();
+    let stdout = run_in_home(r#"{"session_id":"new"}"#, Some("5h"), &home);
+    assert!(
+        stdout.contains("5h[") && stdout.contains("--%"),
+        "expired 5h must render --%: {stdout:?}"
+    );
+}
+
+#[test]
 fn fable_bucket_renders_in_default_layout() {
     // fable_session.json carries rate_limits.model_scoped with a Fable
     // bucket (utilization 0.18, ISO resets_at) — the internal-snapshot wire

@@ -204,13 +204,14 @@ fn build_sid(ctx: &Context) -> Option<String> {
     Some(format!("{mute}#{r}{ink}{shown}{r}"))
 }
 
-/// Like 7d, renders `--%` while quota is unknown (no rate_limits yet). But
-/// once the server ships buckets without a 5h one, the plan has no 5h window
-/// (Ultra) — hide instead of carrying a permanently dead bar.
+/// Like 7d, renders `--%` while quota is unknown. But a live 7d bucket with
+/// no 5h one means the plan has no 5h window (Ultra) — hide instead of
+/// carrying a permanently dead bar. A 5h window the cache dropped as expired
+/// is still unknown, not absent.
 fn build_5h(ctx: &Context) -> Option<String> {
     let rl = ctx.input.rate_limits.as_ref();
     let window = rl.and_then(|r| r.five_hour.as_ref());
-    let plan_has_no_5h = rl.is_some_and(|r| r.seven_day.is_some() || !r.model_scoped.is_empty());
+    let plan_has_no_5h = rl.is_some_and(|r| r.seven_day.is_some() && !r.five_hour_rolled_over);
     if window.is_none() && plan_has_no_5h {
         return None;
     }
@@ -1169,6 +1170,26 @@ mod tests {
             // An empty rate_limits object proves nothing about the plan.
             let mut inp = full_input();
             inp.rate_limits = Some(RateLimits::default());
+            let lay = layout(&["5h"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(out.contains("5h[") && out.contains("--%"), "{out:?}");
+        });
+    }
+
+    #[test]
+    fn five_hour_segment_shows_dashes_with_only_model_scoped_bucket() {
+        no_color(|| {
+            // Only 7d's absence-of-5h says anything about the plan; a lone
+            // model-scoped bucket leaves 5h as unknown as 7d.
+            let mut inp = full_input();
+            let rl = inp.rate_limits.as_mut().unwrap();
+            rl.five_hour = None;
+            rl.seven_day = None;
+            rl.model_scoped = vec![ModelScopedWindow {
+                display_name: "Fable".into(),
+                used_percentage: Some(18.0),
+                resets_at: Some(1_700_000_000 + 3 * 86400),
+            }];
             let lay = layout(&["5h"]);
             let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
             assert!(out.contains("5h[") && out.contains("--%"), "{out:?}");
