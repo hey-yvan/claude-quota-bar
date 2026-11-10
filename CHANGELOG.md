@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0](https://github.com/hey-yvan/claude-quota-bar/compare/v0.8.2...v0.9.0) - 2026-11-10
+
+### Added
+
+- pack the default layout two segments per row; hide 5h without a 5h window ([#39](https://github.com/hey-yvan/claude-quota-bar/pull/39))
+- add effort segment and a three-row default layout ([#36](https://github.com/hey-yvan/claude-quota-bar/pull/36))
+
+### Other
+
+- point the release pipeline at hey-yvan/claude-quota-bar ([#40](https://github.com/hey-yvan/claude-quota-bar/pull/40))
+- bump the actions group across 1 directory with 2 updates ([#34](https://github.com/hey-yvan/claude-quota-bar/pull/34))
+- add a two-row layout that fits 80-column terminals ([#35](https://github.com/hey-yvan/claude-quota-bar/pull/35))
+
 ## [0.8.2](https://github.com/xrf9268-hue/claude-quota-bar/compare/v0.8.1...v0.8.2) - 2026-08-25
 
 ### Other
