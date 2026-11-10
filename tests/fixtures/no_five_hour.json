@@ -1,0 +1,9 @@
+{
+  "session_id": "ultra-session",
+  "model": {"id": "claude-opus-5-5", "display_name": "Opus 5.5"},
+  "workspace": {"current_dir": "/Users/x/proj"},
+  "rate_limits": {
+    "seven_day": {"used_percentage": 11, "resets_at": 4102444800}
+  },
+  "effort": {"level": "high"}
+}

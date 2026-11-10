@@ -9,22 +9,24 @@ use crate::progress::battery_bar;
 use crate::theme::Theme;
 use crate::time_fmt::{countdown, fmt_elapsed, fmt_tokens};
 
-/// Three rows: quota bars, then model/effort/session, then dir. Splitting
-/// keeps each row inside 80 columns and stops a long branch name from
-/// sliding the quota bars sideways.
-pub const DEFAULT_LAYOUT: &[&str] = &[
-    "5h", "7d", "fable", "nl", "model", "effort", "session", "nl", "dir",
-];
-/// Every segment name `build_segment` answers to, including the opt-in ones
-/// absent from `DEFAULT_LAYOUT`. The unknown-layout guard in `render` checks
-/// against this, not the default: a `STATUSLINE_LAYOUT=sid` is a deliberate
-/// layout, not the stale-config case the guard exists to rescue.
+/// Segments the default layout draws from, in order. It carries no `nl`:
+/// rows are packed from whatever is *visible*, `DEFAULT_SEGMENTS_PER_ROW` at a
+/// time, so a hidden segment (5h on plans without that window, Fable without a
+/// bucket) never leaves a half-empty row behind.
+pub const DEFAULT_LAYOUT: &[&str] = &["5h", "7d", "fable", "model", "effort", "session", "dir"];
+/// Narrow enough for the side-by-side panes people run Claude Code in.
+/// Explicit layouts are never re-wrapped: their `nl` tokens are the contract.
+pub const DEFAULT_SEGMENTS_PER_ROW: usize = 2;
 /// Layout token that breaks the line instead of rendering content. Claude
 /// Code prints every line of our stdout as its own status row (see
 /// `Display multiple lines` in its statusline docs). Deliberately absent
 /// from `SEGMENTS`: it carries nothing, so a layout of only line breaks is
 /// still "unrecognized" and falls back to the default.
 pub const LINE_BREAK: &str = "nl";
+/// Every segment name `build_segment` answers to, including the opt-in ones
+/// absent from `DEFAULT_LAYOUT`. The unknown-layout guard in `render` checks
+/// against this, not the default: a `STATUSLINE_LAYOUT=sid` is a deliberate
+/// layout, not the stale-config case the guard exists to rescue.
 pub const SEGMENTS: &[&str] = &[
     "5h", "7d", "fable", "model", "effort", "session", "sid", "dir",
 ];
@@ -82,45 +84,53 @@ pub fn render(ctx: &Context) -> String {
     // a blank line every prompt with no diagnostic — fall back to the
     // default layout instead. A recognized segment that legitimately hides
     // (dir with an empty cwd) still yields empty output.
+    // An empty layout (STATUSLINE_LAYOUT unset) lands here too.
     let recognized = ctx.layout.iter().any(|s| SEGMENTS.contains(&s.as_str()));
-    let mut rows: Vec<String> = Vec::new();
-    let mut parts: Vec<String> = Vec::new();
-    let names: &mut dyn Iterator<Item = &str> = if recognized {
-        &mut ctx.layout.iter().map(String::as_str)
+    let rows: Vec<Vec<String>> = if recognized {
+        explicit_rows(ctx)
     } else {
-        &mut DEFAULT_LAYOUT.iter().copied()
+        let visible: Vec<String> = DEFAULT_LAYOUT
+            .iter()
+            .filter_map(|seg| build_segment(seg, ctx))
+            .filter(|s| !s.is_empty())
+            .collect();
+        visible
+            .chunks(DEFAULT_SEGMENTS_PER_ROW)
+            .map(<[String]>::to_vec)
+            .collect()
     };
-    for seg in names {
+    rows.iter()
+        .map(|row| row.join(&sep))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn explicit_rows(ctx: &Context) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut parts: Vec<String> = Vec::new();
+    for seg in ctx.layout.iter().map(String::as_str) {
         if seg == LINE_BREAK {
             // A row whose segments all hid (sid with no session_id) must
             // not leave a blank line behind — it would cost a terminal row
             // on every prompt for nothing.
             if !parts.is_empty() {
-                rows.push(parts.join(&sep));
-                parts.clear();
+                rows.push(std::mem::take(&mut parts));
             }
             continue;
         }
-        if let Some(rendered) = build_segment(seg, ctx) {
-            if !rendered.is_empty() {
-                parts.push(rendered);
-            }
+        if let Some(rendered) = build_segment(seg, ctx).filter(|s| !s.is_empty()) {
+            parts.push(rendered);
         }
     }
     if !parts.is_empty() {
-        rows.push(parts.join(&sep));
+        rows.push(parts);
     }
-    rows.join("\n")
+    rows
 }
 
 fn build_segment(name: &str, ctx: &Context) -> Option<String> {
     match name {
-        "5h" => Some(build_window(
-            ctx,
-            "5h",
-            window_5h(ctx.input),
-            WINDOW_5H_SECS,
-        )),
+        "5h" => build_5h(ctx),
         "7d" => Some(build_window(
             ctx,
             "7d",
@@ -194,8 +204,17 @@ fn build_sid(ctx: &Context) -> Option<String> {
     Some(format!("{mute}#{r}{ink}{shown}{r}"))
 }
 
-fn window_5h(input: &Input) -> Option<&Window> {
-    input.rate_limits.as_ref()?.five_hour.as_ref()
+/// Like 7d, renders `--%` while quota is unknown (no rate_limits yet). But
+/// once the server ships buckets without a 5h one, the plan has no 5h window
+/// (Ultra) — hide instead of carrying a permanently dead bar.
+fn build_5h(ctx: &Context) -> Option<String> {
+    let rl = ctx.input.rate_limits.as_ref();
+    let window = rl.and_then(|r| r.five_hour.as_ref());
+    let plan_has_no_5h = rl.is_some_and(|r| r.seven_day.is_some() || !r.model_scoped.is_empty());
+    if window.is_none() && plan_has_no_5h {
+        return None;
+    }
+    Some(build_window(ctx, "5h", window, WINDOW_5H_SECS))
 }
 
 fn window_7d(input: &Input) -> Option<&Window> {
@@ -825,37 +844,78 @@ mod tests {
     }
 
     #[test]
-    fn default_layout_is_three_rows() {
+    fn default_layout_lists_segments_without_breaks() {
         assert_eq!(
             DEFAULT_LAYOUT,
-            &[
-                "5h", "7d", "fable", "nl", "model", "effort", "session", "nl", "dir"
-            ]
+            &["5h", "7d", "fable", "model", "effort", "session", "dir"]
         );
+        assert_eq!(DEFAULT_SEGMENTS_PER_ROW, 2);
+    }
+
+    fn default_rows(inp: &Input) -> Vec<String> {
+        // An empty layout is what main passes when STATUSLINE_LAYOUT is unset.
+        let lay: Vec<String> = Vec::new();
+        let mut c = ctx(inp, &lay, None);
+        c.session_elapsed_secs = Some(90);
+        strip_ansi(&render(&c)).lines().map(String::from).collect()
     }
 
     #[test]
-    fn default_layout_renders_quota_model_and_dir_rows() {
+    fn default_layout_puts_two_segments_per_row() {
         no_color(|| {
             let mut inp = full_input();
             inp.effort = Some(Effort {
                 level: "high".into(),
             });
-            let lay = layout(&["nope"]);
-            let mut c = ctx(&inp, &lay, None);
-            c.session_elapsed_secs = Some(90);
-            let out = strip_ansi(&render(&c));
-            let rows: Vec<&str> = out.lines().collect();
-            assert_eq!(rows.len(), 3, "expected three rows in {out:?}");
+            let rows = default_rows(&inp);
+            assert_eq!(rows.len(), 3, "{rows:?}");
             assert!(
-                rows[0].starts_with("5h") && rows[0].contains("7d"),
-                "{out:?}"
+                rows[0].starts_with("5h") && rows[0].contains("| 7d"),
+                "{rows:?}"
             );
             assert!(
-                rows[1].starts_with("Opus 4.7") && rows[1].contains("effort:high"),
-                "{out:?}"
+                rows[1].starts_with("Opus 4.7") && rows[1].ends_with("effort:high"),
+                "{rows:?}"
             );
-            assert!(rows[2].contains("proj"), "{out:?}");
+            assert!(
+                rows[2].starts_with("⏳") && rows[2].ends_with("proj"),
+                "{rows:?}"
+            );
+            assert!(
+                rows.iter().all(|r| r.matches(" | ").count() <= 1),
+                "{rows:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn default_layout_packs_rows_after_hidden_segments() {
+        no_color(|| {
+            // Ultra: no 5h bucket, no Fable — 7d pairs with the model rather
+            // than leaving a half-empty first row.
+            let mut inp = full_input();
+            inp.rate_limits.as_mut().unwrap().five_hour = None;
+            let rows = default_rows(&inp);
+            assert_eq!(rows.len(), 2, "{rows:?}");
+            assert!(
+                rows[0].starts_with("7d") && rows[0].ends_with(")"),
+                "{rows:?}"
+            );
+            assert!(rows[0].contains("| Opus 4.7"), "{rows:?}");
+            assert!(
+                rows[1].starts_with("⏳") && rows[1].ends_with("proj"),
+                "{rows:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn explicit_layout_without_breaks_stays_one_row() {
+        no_color(|| {
+            let inp = full_input();
+            let lay = layout(&["5h", "7d", "model", "dir"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert_eq!(out.lines().count(), 1, "{out:?}");
         });
     }
 
@@ -1086,6 +1146,32 @@ mod tests {
             let lay = layout(&["5h"]);
             let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
             assert!(out.contains("--%"), "expected --% placeholder in {out:?}");
+        });
+    }
+
+    #[test]
+    fn five_hour_segment_hidden_when_plan_has_no_5h_bucket() {
+        no_color(|| {
+            // Plans without a 5h window (Ultra) ship rate_limits with only
+            // seven_day. A permanent "5h[--%]--" would be dead weight.
+            let mut inp = full_input();
+            inp.rate_limits.as_mut().unwrap().five_hour = None;
+            let lay = layout(&["5h", "7d"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(!out.contains("5h"), "5h must hide in {out:?}");
+            assert!(out.starts_with("7d"), "7d must still render in {out:?}");
+        });
+    }
+
+    #[test]
+    fn five_hour_segment_shows_dashes_when_rate_limits_empty() {
+        no_color(|| {
+            // An empty rate_limits object proves nothing about the plan.
+            let mut inp = full_input();
+            inp.rate_limits = Some(RateLimits::default());
+            let lay = layout(&["5h"]);
+            let out = strip_ansi(&render(&ctx(&inp, &lay, None)));
+            assert!(out.contains("5h[") && out.contains("--%"), "{out:?}");
         });
     }
 

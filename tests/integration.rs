@@ -89,6 +89,23 @@ fn session_segment_hidden_without_cost() {
 }
 
 #[test]
+fn plan_without_5h_window_hides_5h_in_default_layout() {
+    // no_five_hour.json mirrors an Ultra payload: rate_limits carries only
+    // seven_day. The default layout must drop the 5h bar, not show it dead.
+    let (stdout, _h) = run(&fixture("no_five_hour.json"), None);
+    assert!(!stdout.contains("5h"), "5h must hide in {stdout:?}");
+    assert!(stdout.contains("7d["), "missing 7d in {stdout:?}");
+    // Visible segments: 7d, model, effort, dir — two per row.
+    let rows: Vec<&str> = stdout.trim_end().lines().collect();
+    assert_eq!(rows.len(), 2, "{stdout:?}");
+    assert!(
+        rows[0].starts_with("7d[") && rows[0].contains("| Opus 5.5"),
+        "{stdout:?}"
+    );
+    assert_eq!(rows[1], "effort:high | proj", "{stdout:?}");
+}
+
+#[test]
 fn fable_bucket_renders_in_default_layout() {
     // fable_session.json carries rate_limits.model_scoped with a Fable
     // bucket (utilization 0.18, ISO resets_at) — the internal-snapshot wire
