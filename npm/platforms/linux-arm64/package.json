@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Native binary for claude-quota-bar (Linux arm64 glibc)",
   "license": "MIT",
-  "repository": "git+https://github.com/xrf9268-hue/claude-quota-bar.git",
+  "repository": "git+https://github.com/hey-yvan/claude-quota-bar.git",
   "os": ["linux"],
   "cpu": ["arm64"],
   "libc": ["glibc"],

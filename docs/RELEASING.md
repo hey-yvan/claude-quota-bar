@@ -40,7 +40,11 @@ no long-lived tokens anywhere.
 ## One-time setup (already done)
 
 - **crates.io Trusted Publisher** for `claude-quota-bar` — repo
-  `xrf9268-hue/claude-quota-bar`, workflow `release.yml`.
+  `hey-yvan/claude-quota-bar`, workflow `release.yml`.
+  The repo moved from `xrf9268-hue` to `hey-yvan`; both Trusted Publishers
+  (crates.io and all 8 npm packages) must name the current owner, since the
+  OIDC token carries it. Re-point them after any future transfer, and update
+  the `github.repository` guard in `release.yml`.
 - **npm Trusted Publisher** for the umbrella + 7 platform packages — see
   [npm-trusted-publishing.md](./npm-trusted-publishing.md).
 - Repo setting **Settings → Actions → General → Workflow permissions →
